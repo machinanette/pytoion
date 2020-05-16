@@ -1,2 +1,2 @@
 # pytoion
- Control toio with python
+  Simple function to control toio in Python
