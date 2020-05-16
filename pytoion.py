@@ -1,14 +1,15 @@
 import sys
 import bluepy
 import time
+import struct
 
-# LED COLOR
+# LED COLOR PATTERN
 class LedColor:
     RED = [255, 0, 0]
     GREEN = [ 0, 255, 0]
     BLUE = [ 0, 0, 255]
 
-# SOUND EFFECT
+# SOUND EFFECT LIST
 class SoundEffect:
     ENTER = 0
     SELECTED = 1
@@ -22,7 +23,7 @@ class SoundEffect:
     EFFECT_1 = 9
     EFFECT_2 = 10
 
-# CHARACTERISTIC uuid and handle
+# CHARACTERISTIC UUID LIST
 class Characteristic:
     uuid_dic = {
         "00002a00": "DEVICE_NAME",
@@ -50,6 +51,14 @@ class Characteristic:
             if(key in self.uuid_dic):
                 exec("self.{}={}".format(self.uuid_dic[key],chara.getHandle()))
 
+class ToioDelegate(bluepy.btle.DefaultDelegate):
+    def __init__(self, params):
+        bluepy.btle.DefaultDelegate.__init__(self)
+
+    def handleNotification(self, handle, data):
+        # TODO...
+        pass
+
 class Toio:
     def __init__(self, address):
         self.address = address
@@ -57,8 +66,9 @@ class Toio:
         try:
             self.peripheral = bluepy.btle.Peripheral()
             self.peripheral.connect(self.address, bluepy.btle.ADDR_TYPE_RANDOM)
-        except:
-            print("device connection failed")
+            self.peripheral.withDelegate(ToioDelegate(bluepy.btle.DefaultDelegate))
+        except Exception as e:
+            print("Connect device failed:", e)
             sys.exit()
 
         self.HANDLE = Characteristic(self.peripheral)
@@ -71,7 +81,8 @@ class Toio:
             btn = self.peripheral.readCharacteristic(
                 self.HANDLE.BUTTON_INFORMATION)
             ret = status[btn[1]]
-        except:
+        except Exception as e:
+            print("Read Button status failed:", e)
             return False
 
         return ret
@@ -80,7 +91,8 @@ class Toio:
         try:
             bat = self.peripheral.readCharacteristic(
                 self.HANDLE.BATTERY_INFORMATION)
-        except:
+        except Exception as e:
+            print("Read Battery status failed:", e)
             return False
 
         return ord(bat)
@@ -88,19 +100,19 @@ class Toio:
     def disconnect(self):
         try:
             self.peripheral.disconnect()
-        except:
+        except Exception as e:
+            print("Disconnect device failed:", e)
             return False
 
     def light_on(self, color, time = 0):
-
         data = [3, time, 1, 1] + color
 
         try:
             self.peripheral.writeCharacteristic(
                 self.HANDLE.LIGHT_CONTROL,
-                bytearray(data),
-			    True)
-        except:
+                bytearray(data), True)
+        except Exception as e:
+            print("Turn on LED failed:", e)
             return False
 
         return True
@@ -109,93 +121,133 @@ class Toio:
         try:
             self.peripheral.writeCharacteristic(
                 self.HANDLE.LIGHT_CONTROL,
-                bytes([1]),
-                True)
-        except:
+                bytes([1]), True)
+        except Exception as e:
+            print("Turn off LED failed:", e)
             return False
 
         return True
 
     def sound_effect(self, type):
         data = [2, type, 255]
-        self.peripheral.writeCharacteristic(
-            self.HANDLE.SOUND_CONTROL,
-            bytearray(data),
-            True)
-
-        return True
-
-    def sound(self):
-        pass
-
-    def __control_motor(self, left_motor, right_motor):
-        data = [1] + left_motor + right_motor
 
         try:
             self.peripheral.writeCharacteristic(
-                self.HANDLE.MOTOR_CONTROL,
-                bytearray(data),
-                True)
-        except:
+                self.HANDLE.SOUND_CONTROL,
+                bytearray(data), True)
+        except Exception as e:
+            print("Play Sound Effect failed", e)
             return False
 
         return True
 
+    def sound(self):
+        # TODO...
+        pass
+
+    def sense_position(self):
+        try:
+            ret = self.peripheral.readCharacteristic(
+                self.HANDLE.ID_INFORMATION)
+        except Exception as e:
+            print("Sense Position ID failed:", e)
+            return False
+
+        # use center position only
+        (_, x, y, angle, _, _, _) = struct.unpack("<"+"Bhhhhhh", ret)
+
+        return (x, y, angle)
+
+    def __control_motor(self, data):
+        try:
+            self.peripheral.writeCharacteristic(
+                self.HANDLE.MOTOR_CONTROL,
+                data, True)
+        except Exception as e:
+            print("Control motor failed:", e)
+            return False
+
+        return True
+
+    def __control_motor_specified_time(self, param):
+        if(len(param) != 7):
+            print("Invalid motor parameter", param)
+            return False
+
+        data = struct.pack("<"+"BBBBBBB", *param)
+
+        return self.__control_motor(data)
+
+    def __control_motor_specified_coordinate(self, param):
+        if(len(param) != 10):
+            print("Invalid motor parameter", param)
+            return False
+
+        data = struct.pack("<"+"BBBBBBB"+"hhh", *param[0:7], *param[7:10])
+        ret = self.__control_motor(data)
+
+        if(ret == True):
+            try:
+                ret = self.peripheral.writeCharacteristic(
+                    self.HANDLE.MOTOR_CONTROL + 1, b'\x01\x00')
+            except Exception as e:
+                print("Receive Notification failed:", e)
+                return False
+
+        return ret
+
     def forward(self, speed = 50):
-        return self.__control_motor([1, 1, speed],[2, 1, speed])
+        data = [1, 1, 1, speed,2, 1, speed]
+        return self.__control_motor_specified_time(data)
 
     def back(self, speed = 50):
-        return self.__control_motor([1, 2, speed],[2, 2, speed])
+        data = [1, 1, 2, speed, 2, 2, speed]
+        return self.__control_motor_specified_time(data)
 
     def stop(self):
-        return self.__control_motor([1, 1, 0],[2, 1, 0])
+        data = [1, 1, 1, 0,2, 1, 0]
+        return self.__control_motor_specified_time(data)
 
-    def rotate_left(self, speed = 50, operating_time = 0.05):
-        ret =  self.__control_motor([1, 2, speed],[2, 1, speed])
-        if(ret == True):
-            time.sleep(operating_time)
-            self.stop()
-
-        return ret
-
-    def rotate_right(self, speed = 50, operating_time = 0.05):
-        ret = self.__control_motor([1, 1, speed],[2, 2, speed])
-
-        if(ret == True):
-            time.sleep(operating_time)
-            self.stop()
+    def rotate_left(self, speed = 50):
+        data = [1, 1, 2, speed, 2, 1, speed]
+        ret =  self.__control_motor_specified_time(data)
 
         return ret
 
-    def forward_pos(self):
-        pass
+    def rotate_right(self, speed = 50):
+        data = [1, 1, 1, speed, 2, 2, speed]
+        ret = self.__control_motor_specified_time(data)
 
-    def back_pos(self):
-        pass
+        return ret
 
-    def rotate_left_pos(self):
-        pass
+    def move(self, coord_x, coord_y, speed = 50, direction = 0 ):
+        data = [3, 0, 5, 0, speed, 0, 0, coord_x, coord_y, direction]
+        ret = self.__control_motor_specified_coordinate(data)
+       
+        return ret
 
-    def pos_rotate_pos(self):
+    def rotate(self):
+        # TODO...
         pass
-
-    def move(self):
-        pass
-
 
     def double_tap(self):
+        # TODO...
         pass
 
     def collision(self):
+        # TODO...
         pass
 
     def level(self):
+        # TODO...
         pass
 
     def attitude(self):
+        # TODO...
         pass
 
     def position(self):
+        # TODO...
         pass
 
 def main():
