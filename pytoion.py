@@ -1,7 +1,7 @@
-import sys
 import bluepy
 import time
 import struct
+import queue
 
 # LED COLOR PATTERN
 class LedColor:
@@ -53,11 +53,16 @@ class Characteristic:
 
 class ToioDelegate(bluepy.btle.DefaultDelegate):
     def __init__(self, params):
+        self.notification = list()
         bluepy.btle.DefaultDelegate.__init__(self)
 
     def handleNotification(self, handle, data):
-        # TODO...
-        pass
+        if(handle == 17):
+            self.notification = struct.unpack("<BBB",data)
+        else:
+            return False
+
+        return True
 
 class Toio:
     def __init__(self, address):
@@ -66,7 +71,8 @@ class Toio:
         try:
             self.peripheral = bluepy.btle.Peripheral()
             self.peripheral.connect(self.address, bluepy.btle.ADDR_TYPE_RANDOM)
-            self.peripheral.withDelegate(ToioDelegate(bluepy.btle.DefaultDelegate))
+            self.delegate = ToioDelegate(bluepy.btle.DefaultDelegate)
+            self.peripheral.withDelegate(self.delegate)
         except Exception as e:
             print("Connect device failed:", e)
             sys.exit()
@@ -145,6 +151,22 @@ class Toio:
         # TODO...
         pass
 
+    def sense_motion(self, q, interval = 2):
+        try: 
+            # request Notification
+            self.peripheral.writeCharacteristic(
+                self.HANDLE.SENSOR_INFORMATION + 1, bytes([1]), False)
+
+            while True:
+                if(self.peripheral.waitForNotifications(1.0)):
+                    print(self.delegate.notification)
+#                    q.put(struct.unpack("<BBBBB", self.delegate.notification))
+        except Exception as e:
+            print("Sense Motion failed:", e)
+            return False
+
+        return True
+
     def sense_position(self):
         try:
             ret = self.peripheral.readCharacteristic(
@@ -153,8 +175,12 @@ class Toio:
             print("Sense Position ID failed:", e)
             return False
 
+        # Position ID missed
+        if(ret == b'\x03'):
+          return False
+
         # use center position only
-        (_, x, y, angle, _, _, _) = struct.unpack("<"+"Bhhhhhh", ret)
+        (_, x, y, angle, _, _, _) = struct.unpack("<Bhhhhhh", ret)
 
         return (x, y, angle)
 
@@ -162,7 +188,8 @@ class Toio:
         try:
             self.peripheral.writeCharacteristic(
                 self.HANDLE.MOTOR_CONTROL,
-                data, True)
+                data, False)
+
         except Exception as e:
             print("Control motor failed:", e)
             return False
@@ -174,7 +201,7 @@ class Toio:
             print("Invalid motor parameter", param)
             return False
 
-        data = struct.pack("<"+"BBBBBBB", *param)
+        data = struct.pack("<BBBBBBB", *param)
 
         return self.__control_motor(data)
 
@@ -183,18 +210,26 @@ class Toio:
             print("Invalid motor parameter", param)
             return False
 
-        data = struct.pack("<"+"BBBBBBB"+"hhh", *param[0:7], *param[7:10])
+        data = struct.pack("<BBBBBBB"+"hhh", *param[0:7], *param[7:10])
         ret = self.__control_motor(data)
 
         if(ret == True):
             try:
+                # request Notification
                 ret = self.peripheral.writeCharacteristic(
-                    self.HANDLE.MOTOR_CONTROL + 1, b'\x01\x00')
+                    self.HANDLE.MOTOR_CONTROL + 1, bytes([1]), True)
+
+                while True:
+                    if(self.peripheral.waitForNotifications(1.0)):
+                        break
+
             except Exception as e:
                 print("Receive Notification failed:", e)
                 return False
 
-        return ret
+            return self.delegate.notification
+        else:
+            return False
 
     def forward(self, speed = 50):
         data = [1, 1, 1, speed,2, 1, speed]
@@ -220,21 +255,35 @@ class Toio:
 
         return ret
 
-    def move(self, coord_x, coord_y, speed = 50, direction = 0 ):
-        data = [3, 0, 5, 0, speed, 0, 0, coord_x, coord_y, direction]
+    def move(self, coord_x, coord_y, angle = 0, speed = 50, move_type = 1):
+        data = [3, 0, 5, move_type, speed, 0, 0, coord_x, coord_y, angle]
         ret = self.__control_motor_specified_coordinate(data)
        
         return ret
 
-    def rotate(self):
+    def rotate(self, direction, angle, speed = 50):
+        pos = self.sense_position()
+        if(pos == False):
+            return False
+
+        if(direction == "right"):
+            angle = pos[2] + angle
+            if(angle > 360):
+                angle = angle % 360
+        else:
+            angle = pos[2] - angle
+            if(angle < 0):
+                angle = 360 + angle 
+
+        ret = self.move(pos[0], pos[1], angle)
+
+        return ret
+
+    def collision(self):
         # TODO...
         pass
 
     def double_tap(self):
-        # TODO...
-        pass
-
-    def collision(self):
         # TODO...
         pass
 

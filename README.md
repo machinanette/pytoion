@@ -21,6 +21,8 @@ I would recommend having command-line tools from BlueZ available for debugging. 
 ```bash
 $ python sample.py XX:XX:XX:XX(BLE ADDRESS)
 ```
+## Note
+Currently under development
 
 ## License
 Apache License 2.0
