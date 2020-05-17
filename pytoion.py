@@ -151,22 +151,6 @@ class Toio:
         # TODO...
         pass
 
-    def sense_motion(self, q, interval = 2):
-        try: 
-            # request Notification
-            self.peripheral.writeCharacteristic(
-                self.HANDLE.SENSOR_INFORMATION + 1, bytes([1]), False)
-
-            while True:
-                if(self.peripheral.waitForNotifications(1.0)):
-                    print(self.delegate.notification)
-#                    q.put(struct.unpack("<BBBBB", self.delegate.notification))
-        except Exception as e:
-            print("Sense Motion failed:", e)
-            return False
-
-        return True
-
     def sense_position(self):
         try:
             ret = self.peripheral.readCharacteristic(

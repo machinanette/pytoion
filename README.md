@@ -19,7 +19,7 @@ $ pip install bluepy
 I would recommend having command-line tools from BlueZ available for debugging. (for Raspberry Pi See [RPi Bluetooth LE](https://www.elinux.org/RPi_Bluetooth_LE)
 
 ```bash
-$ python sample.py XX:XX:XX:XX(BLE ADDRESS)
+$ python example/blink_led.py XX:XX:XX:XX(BLE ADDRESS)
 ```
 ## Note
 Currently under development
