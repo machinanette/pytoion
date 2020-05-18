@@ -1,97 +1,88 @@
 import bluepy
 import time
 import struct
-import queue
-
-# LED COLOR PATTERN
-class LedColor:
-    RED = [255, 0, 0]
-    GREEN = [ 0, 255, 0]
-    BLUE = [ 0, 0, 255]
-
-# SOUND EFFECT LIST
-class SoundEffect:
-    ENTER = 0
-    SELECTED = 1
-    CANCEL = 2
-    CURSOR = 3
-    MAT_IN = 4
-    MAT_OUT = 5
-    GET_1 = 6
-    GET_2 = 7
-    GET_3 = 8
-    EFFECT_1 = 9
-    EFFECT_2 = 10
-
-# CHARACTERISTIC UUID LIST
-class Characteristic:
-    uuid_dic = {
-        "00002a00": "DEVICE_NAME",
-        "00002a01": "APPEARANCE",
-        "00002a04": "PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS",
-        "00002aa6": "CENTRAL_ADDRESS_RESOLUTION",
-        "10b20101": "ID_INFORMATION",
-        "10b20102": "MOTOR_CONTROL",
-        "10b20103": "LIGHT_CONTROL",
-        "10b20104": "SOUND_CONTROL",
-        "10b20106": "SENSOR_INFORMATION",
-        "10b20107": "BUTTON_INFORMATION",
-        "10b20108": "BATTERY_INFORMATION",
-        "10b201ff": "CONFIGURATION"
-    }
-
-    def __init__(self, peripheral):
-        self.__set_handle_id(peripheral)
-
-    def __set_handle_id(self, peripheral):
-        charas = peripheral.getCharacteristics()
-
-        for chara in charas:
-            key = str(chara.uuid).split("-")[0]
-            if(key in self.uuid_dic):
-                exec("self.{}={}".format(self.uuid_dic[key],chara.getHandle()))
+from define import LedColor, SoundEffect, Characteristic
 
 class ToioDelegate(bluepy.btle.DefaultDelegate):
     def __init__(self, params):
-        self.notification = list()
+        self.notification = dict()
         bluepy.btle.DefaultDelegate.__init__(self)
 
     def handleNotification(self, handle, data):
-        if(handle == 17):
-            self.notification = struct.unpack("<BBB",data)
-        else:
-            return False
-
+        self.handle = handle
+        if(handle == self.HANDLE.MOTOR_CONTROL):
+            self.notification["motor"] = struct.unpack("<BBB",data)
+        elif(handle == self.HANDLE.BUTTON_INFORMATION):
+            self.notification["button"] = data[1]
+        elif(handle == self.HANDLE.SENSOR_INFORMATION):
+            self.notification["motion"] = struct.unpack("<BBBBB",data)
         return True
 
 class Toio:
     def __init__(self, address):
         self.address = address
 
+        self.COLOR = LedColor()
+        self.SE = SoundEffect()
+
         try:
             self.peripheral = bluepy.btle.Peripheral()
             self.peripheral.connect(self.address, bluepy.btle.ADDR_TYPE_RANDOM)
-            self.delegate = ToioDelegate(bluepy.btle.DefaultDelegate)
-            self.peripheral.withDelegate(self.delegate)
         except Exception as e:
             print("Connect device failed:", e)
             sys.exit()
 
-        self.HANDLE = Characteristic(self.peripheral)
+        try:
+            handle = Characteristic()
+            charas = self.peripheral.getCharacteristics()
+            handle_dic = handle._asdict()
+            del(handle_dic["UUID_DIC"])
 
-    def button(self):
-        status = {0x80 : "ON", 0x00 : "OFF"}
-        ret = ""
+            for chara in charas:
+                key = str(chara.uuid).split("-")[0]
+                if(key in handle.UUID_DIC):
+                    handle_dic[handle.UUID_DIC[key]] = chara.getHandle()
+
+            self.HANDLE = Characteristic(**handle_dic)
+        except Exception as e:
+            print("Get Handle id Failed:", e)
+            sys.exit()
 
         try:
-            btn = self.peripheral.readCharacteristic(
-                self.HANDLE.BUTTON_INFORMATION)
-            ret = status[btn[1]]
+            self.delegate = ToioDelegate(bluepy.btle.DefaultDelegate)
+            self.peripheral.withDelegate(self.delegate)
+            self.delegate.HANDLE = self.HANDLE
+        except Exception as e:
+            print("Set delegate failed:", e)
+            sys.exit()
+
+        try:
+            notification = [
+                self.HANDLE.MOTOR_CONTROL,
+                self.HANDLE.BUTTON_INFORMATION,
+                self.HANDLE.SENSOR_INFORMATION
+            ]
+
+            for i in notification:
+                self.peripheral.writeCharacteristic(
+                    i + 1, bytes([1]), True)
+                
+        except:
+            print("Set notification failed:", e)
+            sys.exit()
+
+    def button(self):
+        status = {0x80 : "PUSH", 0x00 : "RELEASE"}
+
+        try:
+            while True:
+                if(self.peripheral.waitForNotifications(1.0)):
+                    break
         except Exception as e:
             print("Read Button status failed:", e)
             return False
 
-        return ret
+        return  status[self.delegate.notification["button"]]
 
     def battery(self):
         try:
@@ -110,8 +101,8 @@ class Toio:
             print("Disconnect device failed:", e)
             return False
 
-    def light_on(self, color, time = 0):
-        data = [3, time, 1, 1] + color
+    def led_on(self, color, time = 0):
+        data = tuple([3, time, 1, 1]) + color
 
         try:
             self.peripheral.writeCharacteristic(
@@ -123,7 +114,7 @@ class Toio:
 
         return True
 
-    def light_off(self):
+    def led_off(self):
         try:
             self.peripheral.writeCharacteristic(
                 self.HANDLE.LIGHT_CONTROL,
@@ -150,6 +141,19 @@ class Toio:
     def sound(self):
         # TODO...
         pass
+
+    def sense_motion(self):
+        try:
+            while True:
+                if(self.peripheral.waitForNotifications(1.0) and
+                   self.delegate.handle == self.HANDLE.SENSOR_INFORMATION):
+                    break
+
+        except Exception as e:
+            print("Receive Notification failed:", e)
+            return False
+
+        return self.delegate.notification["motion"]
 
     def sense_position(self):
         try:
@@ -197,21 +201,18 @@ class Toio:
         data = struct.pack("<BBBBBBB"+"hhh", *param[0:7], *param[7:10])
         ret = self.__control_motor(data)
 
-        if(ret == True):
+        if ret:
             try:
-                # request Notification
-                ret = self.peripheral.writeCharacteristic(
-                    self.HANDLE.MOTOR_CONTROL + 1, bytes([1]), True)
-
                 while True:
-                    if(self.peripheral.waitForNotifications(1.0)):
+                    if(self.peripheral.waitForNotifications(1.0) and
+                       self.delegate.handle == self.HANDLE.MOTOR_CONTROL):
                         break
 
             except Exception as e:
                 print("Receive Notification failed:", e)
                 return False
 
-            return self.delegate.notification
+            return self.delegate.notification["motor"]
         else:
             return False
 

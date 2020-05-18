@@ -22,7 +22,8 @@ cube = Toio(sys.argv[1])
 try:
     while True:
         # move center position and start
-        cube.move(250,250)
+        ret = cube.move(250,250)
+        print(ret)
         cube.rotate("left",180)
         cube.move(200,250)
         cube.rotate("right",45)

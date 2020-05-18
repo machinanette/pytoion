@@ -13,25 +13,13 @@ cube = Toio(sys.argv[1])
 
 # preset sound effect
 # see https://toio.github.io/toio-spec/docs/ble_sound
-se = {
-    "Enter"    : SoundEffect.ENTER,
-    "Selected" : SoundEffect.SELECTED,
-    "Cancel"   : SoundEffect.CANCEL,
-    "Cursor"   : SoundEffect.CURSOR,
-    "Mat in"   : SoundEffect.MAT_IN,
-    "Mat Out"  : SoundEffect.MAT_OUT,
-    "Get 1"    : SoundEffect.GET_1,
-    "Get 2"    : SoundEffect.GET_2,
-    "Get 3"    : SoundEffect.GET_3,
-    "Effect 1" : SoundEffect.EFFECT_1,
-    "Effect 2" : SoundEffect.EFFECT_2
-}
 
 try:
+    se = cube.SE._asdict()
     for key,value in se.items():
         print(key)
         cube.sound_effect(value)
-        time.sleep(1)
+        time.sleep(0.5)
 finally:
     cube.disconnect()
 

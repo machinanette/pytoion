@@ -13,9 +13,9 @@ cube = Toio(sys.argv[1])
 
 try:
     while True:
-        cube.light_on(LedColor.RED)
+        cube.led_on(cube.COLOR.GREEN)
         time.sleep(1)
-        cube.light_off()
+        cube.led_off()
         time.sleep(1)
 finally:
     cube.disconnect()
