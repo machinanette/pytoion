@@ -2,9 +2,13 @@ from typing import NamedTuple, TypedDict
 
 # LED COLOR PATTERN
 class LedColor(NamedTuple):
-    RED:   tuple = (255, 0, 0)
-    GREEN: tuple = (0, 255, 0)
-    BLUE:  tuple = (0, 0, 255)
+    RED:    tuple = (255, 0, 0)
+    GREEN:  tuple = (0, 255, 0)
+    BLUE:   tuple = (0, 0, 255)
+    YELLOW: tuple = (255, 255, 0)
+    PURPLE: tuple = (255, 0, 255)
+    AQUA:   tuple = (0, 255, 255)
+    WHITE:  tuple = (255, 255, 255)
 
 # SOUND EFFECT LIST
 class SoundEffect(NamedTuple):
@@ -49,3 +53,19 @@ class Characteristic(NamedTuple):
         "10b20108": "BATTERY_INFORMATION",
         "10b201ff": "CONFIGURATION"
     }
+
+# SOUND
+class Sound(NamedTuple):
+    C:  int = 0
+    CS: int = 1
+    D:  int = 2
+    DS: int = 3
+    E:  int = 4
+    F:  int = 5
+    FS: int = 6
+    G:  int = 7
+    GS: int = 8
+    A:  int = 9
+    AS: int = 10
+    B:  int = 11
+

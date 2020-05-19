@@ -1,7 +1,7 @@
 import bluepy
 import time
 import struct
-from define import LedColor, SoundEffect, Characteristic
+from define import LedColor, SoundEffect, Characteristic, Sound
 
 class ToioDelegate(bluepy.btle.DefaultDelegate):
     def __init__(self, params):
@@ -22,8 +22,10 @@ class Toio:
     def __init__(self, address):
         self.address = address
 
+        # load define variable
         self.COLOR = LedColor()
         self.SE = SoundEffect()
+        self.NOTE = Sound()
 
         try:
             self.peripheral = bluepy.btle.Peripheral()
@@ -127,22 +129,31 @@ class Toio:
 
     def sound_effect(self, type):
         data = [2, type, 255]
+        self.__play_sound(data)
+        
+        return True
 
+    def sound(self, note, octave = 5, time = 30, volume = 255):
+        data = [3, 1, 1]
+
+        data = data + [time, note + octave * 12, volume]
+
+        self.__play_sound(data)
+
+        return True
+
+    def __play_sound(self, data):
         try:
             self.peripheral.writeCharacteristic(
                 self.HANDLE.SOUND_CONTROL,
                 bytearray(data), True)
         except Exception as e:
-            print("Play Sound Effect failed", e)
+            print("Play Sound failed", e)
             return False
 
         return True
 
-    def sound(self):
-        # TODO...
-        pass
-
-    def sense_motion(self):
+    def __sense_motion(self):
         try:
             while True:
                 if(self.peripheral.waitForNotifications(1.0) and
@@ -154,23 +165,6 @@ class Toio:
             return False
 
         return self.delegate.notification["motion"]
-
-    def sense_position(self):
-        try:
-            ret = self.peripheral.readCharacteristic(
-                self.HANDLE.ID_INFORMATION)
-        except Exception as e:
-            print("Sense Position ID failed:", e)
-            return False
-
-        # Position ID missed
-        if(ret == b'\x03'):
-          return False
-
-        # use center position only
-        (_, x, y, angle, _, _, _) = struct.unpack("<Bhhhhhh", ret)
-
-        return (x, y, angle)
 
     def __control_motor(self, data):
         try:
@@ -247,7 +241,7 @@ class Toio:
         return ret
 
     def rotate(self, direction, angle, speed = 50):
-        pos = self.sense_position()
+        pos = self.position()
         if(pos == False):
             return False
 
@@ -265,24 +259,41 @@ class Toio:
         return ret
 
     def collision(self):
-        # TODO...
+        # not yet
         pass
 
     def double_tap(self):
-        # TODO...
+        # not yet
         pass
 
-    def level(self):
-        # TODO...
+    def horizontal(self):
+        # not yet
         pass
 
     def attitude(self):
-        # TODO...
+        # not yet
+        pass
+
+    def card(self):
+        # not yet
         pass
 
     def position(self):
-        # TODO...
-        pass
+        try:
+            ret = self.peripheral.readCharacteristic(
+                self.HANDLE.ID_INFORMATION)
+        except Exception as e:
+            print("Sense Position ID failed:", e)
+            return False
+
+        # Position ID missed
+        if(ret == b'\x03'):
+          return False
+
+        # use center position only
+        (_, x, y, angle, _, _, _) = struct.unpack("<Bhhhhhh", ret)
+
+        return (x, y, angle)
 
 def main():
     pass

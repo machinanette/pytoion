@@ -11,12 +11,19 @@ if len(sys.argv) == 1:
 
 cube = Toio(sys.argv[1])
 
+cube.led_on(cube.COLOR.GREEN)
+time.sleep(1)
+cube.led_off()
+
 try:
     while True:
-        cube.led_on(cube.COLOR.GREEN)
-        time.sleep(1)
-        cube.led_off()
-        time.sleep(1)
+        color = cube.COLOR._asdict()
+        for key,value in color.items():
+            print("blink: ", key)
+            cube.led_on(value)
+            time.sleep(1)
+            cube.led_off()
 finally:
+    cube.led_off()
     cube.disconnect()
 
